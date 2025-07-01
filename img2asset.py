@@ -39,17 +39,16 @@ def sanitize_js_var_name(name):
 
 def convert_and_resize(input_path, width=None, height=None):
     """
-    Converts a JPG image to a 16-color paletted PNG format, with optional
-    resizing.
+    Converts an image to RGBA format, with optional resizing.
+    Images are only shrunk, never enlarged.
     
     Args:
-        input_path (str): The path to the input JPG image file.
-        output_path (str): The path where the output PNG image will be saved.
+        input_path (str): The path to the input image file.
         width (int, optional): The desired width of the output image. Defaults to None.
         height (int, optional): The desired height of the output image. Defaults to None.
     """
     try:
-        # Open the JPG image
+        # Open the image
         img = Image.open(input_path)
         orig_width, orig_height = img.size
 
@@ -82,28 +81,45 @@ def convert_and_resize(input_path, width=None, height=None):
                     img = img.resize((new_width, height), Image.Resampling.LANCZOS)
                 else:
                     print(f"Requested height {height} is larger than original {orig_height}. Keeping original size.")
-        # The quantize method works on 'L' and 'RGB' modes.
-        # We convert to 'RGB' to be safe, as JPGs can be in other modes like 'L' or 'CMYK'.
-        img_rgb = img.convert("RGB")
-        return img_rgb
+        # Convert to RGBA to support transparency in intermediate format
+        img_rgba = img.convert("RGBA")
+        return img_rgba
     except FileNotFoundError:
         print(f"Error: Input file '{input_path}' not found.")
     return None
 
-def create_palette_from_images(img_rgb):
+def create_palette_from_image(img_rgba):
     """
-    Creates a 16-color palette image from the given image.
-    This palette image can be used to quantize other images.
+    Creates a 16-color palette from the image, reserving index 0 for transparency.
     
     Args:
-        img_rgb (PIL.Image): The source RGB image to generate a palette from.
+        img_rgba (PIL.Image): The source RGBA image to generate a palette from.
     
     Returns:
         PIL.Image: A new 16-color paletted image that can be used as a palette.
     """
-    print("Creating a 16-color palette from the image.")
-    quantized_img = img_rgb.quantize(colors=16)
-    return quantized_img
+    # To generate a palette from image content, we should only consider opaque pixels.
+    # Create a version of the image with a white background to avoid the alpha channel
+    # influencing the quantizer.
+    img_rgb = Image.new("RGB", img_rgba.size, (255, 255, 255))
+    img_rgb.paste(img_rgba, mask=img_rgba.getchannel('A'))
+
+    print("Creating a 15-color palette from the image, reserving color 0 for transparency.")
+    # Quantize to 15 colors for the image content.
+    quantized_to_15 = img_rgb.quantize(colors=15)
+    
+    # Get the 15-color palette (45 bytes)
+    palette_15_colors = quantized_to_15.getpalette()[:15*3]
+    
+    # Create a new 16-color palette: [transparent_color] + [15 image colors]
+    # Use black for the transparent color placeholder and pad to 256 colors.
+    final_palette_data = [0, 0, 0] + palette_15_colors
+    final_palette_data.extend([0, 0, 0] * (256 - 16))
+    
+    # Create a dummy 1x1 paletted image to hold our new palette.
+    palette_image = Image.new('P', (1, 1))
+    palette_image.putpalette(final_palette_data)
+    return palette_image
 
 def create_palette_image_from_hex_list(hex_colors):
     """
@@ -184,22 +200,76 @@ def create_palette_from_hex_colors(hex_colors_str):
     colors = [c.strip() for c in hex_colors_str.split(',')]
     return create_palette_image_from_hex_list(colors)
 
-def write_asset_files(img_rgb, img_name, asset_path, palette_image):
+def write_asset_files(img_rgba, img_name, asset_path, palette_image):
     """
     Write the image to PNG file and create TypeScript asset files. 
-
-    Args:
-        img_rgb (PIL.Image): The source RGB PIL image object.
-        img_name (str): The base name for the output files.
-        asset_path (str): The path where the asset files will be saved.
-        palette_image (PIL.Image): The palette image to apply.
     """
     output_path = f"{img_name}.png"
 
     var_name = sanitize_js_var_name(os.path.basename(img_name))
-    # Apply the palette from the palette_image
     print(f"Applying palette to create '{os.path.basename(output_path)}'.")
-    quantized_img = img_rgb.quantize(palette=palette_image)
+
+    # Ensure source is RGBA to access alpha channel
+    if img_rgba.mode != "RGBA":
+        img_rgba = img_rgba.convert("RGBA")
+
+    # Check for transparency in the source image to decide quantization strategy
+    has_transparency = False
+    if img_rgba.getchannel('A').getextrema()[0] < 255:
+        has_transparency = True
+
+    if has_transparency:
+        # For images with transparent pixels, map them to index 0.
+        quantized_rgb_part = img_rgba.convert("RGB").quantize(palette=palette_image)
+
+        # Find which palette index is black (0,0,0)
+        pal = palette_image.getpalette()[:16*3]
+        black_rgb = (0, 0, 0)
+        black_index = None
+        for i in range(16):
+            if tuple(pal[i*3:i*3+3]) == black_rgb:
+                black_index = i
+                break
+        if black_index is None:
+            black_index = 15  # fallback
+
+        # Create a new paletted image, initialized to color index 0 (transparent).
+        quantized_img = Image.new("P", img_rgba.size, 0)
+        quantized_img.putpalette(palette_image.getpalette())
+
+        # Prepare the quantized data, remapping black_index to 15
+        quantized_data = list(quantized_rgb_part.getdata())
+        remapped_data = []
+        alpha_data = list(img_rgba.getchannel('A').getdata())
+        for q, a in zip(quantized_data, alpha_data):
+            if a == 0:
+                remapped_data.append(0)  # transparent
+            elif q == black_index:
+                remapped_data.append(15)  # black
+            else:
+                # Avoid assigning transparent index to opaque pixels
+                if q == 0:
+                    remapped_data.append(1)  # shift to a non-transparent index
+                else:
+                    remapped_data.append(q)
+        quantized_img.putdata(remapped_data)
+    else:
+        # For opaque images, quantize to the 15 non-transparent colors and shift indices.
+        full_palette_data = palette_image.getpalette()
+        
+        # 1. Create a temporary 15-color palette (from index 1-15) for the quantizer.
+        palette_for_quantization_data = full_palette_data[3:16*3]
+        temp_palette_image = Image.new("P", (1, 1))
+        temp_palette_image.putpalette(palette_for_quantization_data + ([0, 0, 0] * (256 - 15)))
+        
+        # 2. Quantize the image using only these 15 colors. The result has indices 0-14.
+        quantized_to_15_colors = img_rgba.convert("RGB").quantize(palette=temp_palette_image)
+        
+        # 3. Create the final image, remapping pixel indices from 0-14 to 1-15 to avoid using index 0.
+        quantized_img = Image.new("P", img_rgba.size)
+        quantized_img.putpalette(full_palette_data)
+        quantized_img.putdata([p + 1 for p in quantized_to_15_colors.getdata()])
+
     with open(asset_path, 'w') as f_asset:
         # Get and write the palette as a hex string from the palette_image
         palette_data = palette_image.getpalette()
@@ -297,12 +367,13 @@ def main():
         elif args.palette_file:
             print(f"Using custom palette from file: {args.palette_file}")
             palette_image = create_palette_from_json_file(args.palette_file)
-        if palette_image is None:
-            print("Generating a 16-color palette from the image.")
-            palette_image = create_palette_from_images(img_to_process)
+        else:
+            palette_image = create_palette_from_image(img_to_process)
 
         if palette_image:
             write_asset_files(img_to_process, base_name, asset_path, palette_image)
+        else:
+            print("Could not create or load a palette. Aborting.")
 
 if __name__ == "__main__":
     main()

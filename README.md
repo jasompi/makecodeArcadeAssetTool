@@ -3,7 +3,7 @@
 ## Create asset from image files
 
 ```
-./img2asset.py -h
+~ $ ./img2asset.py -h
 usage: img2asset.py [-h] [-w WIDTH] [--height HEIGHT] [--palette PALETTE | --palette-file PALETTE_FILE] input_path [output_path]
 
 Create MakeCode Arcade compatible asset from image and save a PNG file for reference.
