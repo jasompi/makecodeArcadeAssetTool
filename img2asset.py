@@ -298,7 +298,25 @@ def write_asset_files(img_rgba, img_name, asset_path, palette_image):
                 packed_bytes.append(byte)
 
         pixel_hex_string = packed_bytes.hex().upper()
-        f_asset.write(f'namespace images {{\n    export const {var_name} = \nimage.ofBuffer(hex`e4{img_width:02X}{img_height:02X}00{pixel_hex_string}`);\n}}\n')
+
+        # Start the images namespace
+        f_asset.write('namespace images {\n')
+
+        # Write the buffer-based image
+        f_asset.write(f'    export const {var_name} = \nimage.ofBuffer(hex`e4{img_width:02X}{img_height:02X}00{pixel_hex_string}`);\n\n')
+
+        # Create and write the human-readable img`` format
+        img_tag_rows = []
+        hex_digits = ".123456789abcdef"
+        for y in range(img_height):
+            row_str = [(hex_digits[quantized_img.getpixel((x, y))]) for x in range(img_width)]
+            img_tag_rows.append(" ".join(row_str))
+
+        img_tag_content = "\n".join([f"    {row}" for row in img_tag_rows])
+        f_asset.write(f'    //% imghres\n    export const {var_name}_img = img`\n{img_tag_content}\n`\n\n')
+
+        # Close the namespace
+        f_asset.write('}\n')
 
     print(f"TypeScript asset file created at '{asset_path}'")
     # Save the image as PNG, making color index 0 transparent.
