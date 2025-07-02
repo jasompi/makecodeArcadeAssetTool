@@ -321,15 +321,15 @@ def main():
     parser.add_argument("-w", "--width", type=int, help=
         "The desired width of the output image(s) in pixels.\nDefaults to 160 if --height is also omitted.\n"
         "If only --width is provided, height is scaled to maintain aspect ratio.")
-    parser.add_argument("--height", type=int, help=
+    parser.add_argument("-H", "--height", type=int, help=
         "The desired height of the output image(s) in pixels.\nDefaults to 120 if --width is also omitted.\n"
         "If only --height is provided, width is scaled to maintain aspect ratio.")
     palette_group = parser.add_mutually_exclusive_group()
-    palette_group.add_argument("--palette", type=str, help=
+    palette_group.add_argument("-p", "--palette", type=str, help=
         "A comma-separated list of hex colors (e.g., '#FF0000,#00FF00') to use as a custom palette.\n"
         "The first color is used for transparency. Up to 16 colors are supported.\n"
         "If provided, this palette is used instead of generating one from the image(s).")
-    palette_group.add_argument("--palette-file", type=str, help=
+    palette_group.add_argument("-f", "--palette-file", type=str, help=
         "Path to a JSON file containing a custom palette.\n"
         "The JSON should have a 'palette' key with a list of hex color strings.\n"
         "e.g., {\"palette\": [\"#000000\", \"#FFFFFF\", ...]}")
