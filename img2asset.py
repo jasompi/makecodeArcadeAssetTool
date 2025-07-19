@@ -38,7 +38,7 @@ def sanitize_js_var_name(name):
 
     return name
 
-def convert_and_resize(input_path, width=None, height=None):
+def convert_and_resize(input_path, width=None, height=None, scale_mode="fit"):
     """
     Converts an image to RGBA format, with optional resizing.
     Images are only shrunk, never enlarged.
@@ -47,6 +47,7 @@ def convert_and_resize(input_path, width=None, height=None):
         input_path (str): The path to the input image file.
         width (int, optional): The desired width of the output image. Defaults to None.
         height (int, optional): The desired height of the output image. Defaults to None.
+        scale_mode (str): How to handle aspect ratio mismatch - "fit" or "fill". Defaults to "fit".
     """
     try:
         # Open the image
@@ -59,8 +60,12 @@ def convert_and_resize(input_path, width=None, height=None):
             target_width = min(width, orig_width)
             target_height = min(height, orig_height)
             if target_width < orig_width or target_height < orig_height:
-                print(f"Resizing and padding image to {target_width}x{target_height} pixels (no enlargement).")
-                img = ImageOps.pad(img, (target_width, target_height))
+                if scale_mode == "fill":
+                    print(f"Resizing and cropping image to {target_width}x{target_height} pixels (fill mode).")
+                    img = ImageOps.fit(img, (target_width, target_height))
+                else:  # fit mode (default)
+                    print(f"Resizing and padding image to {target_width}x{target_height} pixels (fit mode).")
+                    img = ImageOps.pad(img, (target_width, target_height))
             else:
                 print(f"Requested size {width}x{height} is larger than original {orig_width}x{orig_height}. Keeping original size.")
                 # No resizing, keep original
@@ -321,9 +326,13 @@ def main():
     parser.add_argument("-w", "--width", type=int, help=
         "The desired width of the output image(s) in pixels.\nDefaults to 160 if --height is also omitted.\n"
         "If only --width is provided, height is scaled to maintain aspect ratio.")
-    parser.add_argument("-H", "--height", type=int, help=
+    parser.add_argument("-H","--height", type=int, help=
         "The desired height of the output image(s) in pixels.\nDefaults to 120 if --width is also omitted.\n"
         "If only --height is provided, width is scaled to maintain aspect ratio.")
+    parser.add_argument("-s", "--scale", choices=["fit", "fill"], default="fit", help=
+        "How to handle aspect ratio mismatch when both width and height are specified.\n"
+        "'fit' (default): pad image to fit within dimensions, maintaining aspect ratio.\n"
+        "'fill': crop image to fill dimensions, maintaining aspect ratio.")
     palette_group = parser.add_mutually_exclusive_group()
     palette_group.add_argument("-p", "--palette", type=str, help=
         "A comma-separated list of hex colors (e.g., '#FF0000,#00FF00') to use as a custom palette.\n"
@@ -339,6 +348,7 @@ def main():
     output_dir = args.output
     width = args.width
     height = args.height
+    scale_mode = args.scale
 
     # If no dimensions are specified, default to 160x120
     if width is None and height is None:
@@ -354,7 +364,7 @@ def main():
     img_base_names = []
     for file in input_files:
         try:
-            img = convert_and_resize(file, width=width, height=height)
+            img = convert_and_resize(file, width=width, height=height, scale_mode=scale_mode)
             if img is not None:
                 imgs_to_process.append(img)
                 img_base_names.append(os.path.splitext(os.path.basename(file))[0])

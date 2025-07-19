@@ -4,7 +4,7 @@
 
 ```
 ~ $ ./img2asset.py -h
-usage: img2asset.py [-h] [-o OUTPUT] [-w WIDTH] [-H HEIGHT] [-p PALETTE | -f PALETTE_FILE] input_path [input_path ...]
+usage: img2asset.py [-h] [-o OUTPUT] [-w WIDTH] [-H HEIGHT] [-s {fit,fill}] [-p PALETTE | -f PALETTE_FILE] input_path [input_path ...]
 
 Create MakeCode Arcade compatible asset(s) from image(s) and save PNG file(s) for reference.
 
@@ -21,6 +21,10 @@ options:
   -H, --height HEIGHT   The desired height of the output image(s) in pixels.
                         Defaults to 120 if --width is also omitted.
                         If only --height is provided, width is scaled to maintain aspect ratio.
+  -s, --scale {fit,fill}
+                        How to handle aspect ratio mismatch when both width and height are specified.
+                        'fit' (default): pad image to fit within dimensions, maintaining aspect ratio.
+                        'fill': crop image to fill dimensions, maintaining aspect ratio.
   -p, --palette PALETTE
                         A comma-separated list of hex colors (e.g., '#FF0000,#00FF00') to use as a custom palette.
                         The first color is used for transparency. Up to 16 colors are supported.
