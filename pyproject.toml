@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "img2asset"
+version = "0.1.0"
+description = "MakeCode Arcade Asset Tool"
+authors = [{name = "Jasom Pi"}]
+requires-python = ">=3.8"
+dependencies = ["Pillow"]
+
+[project.scripts]
+img2asset = "img2asset:main"
+
+[tool.setuptools]
+py-modules = ["img2asset"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["images*", "output*"]
